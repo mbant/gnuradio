@@ -59,7 +59,7 @@ namespace gr {
       );
       ~ofdm_carrier_allocator_cvc_impl();
 
-      std::string len_tag_key() { return d_length_tag_key_str; };
+      std::string tsb_key() { return d_tsb_key_str; };
 
       const int fft_len() { return d_fft_len; };
       std::vector<std::vector<int> > occupied_carriers() { return d_occupied_carriers; };

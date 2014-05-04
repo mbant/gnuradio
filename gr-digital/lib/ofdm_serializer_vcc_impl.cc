@@ -33,7 +33,7 @@ namespace gr {
     ofdm_serializer_vcc::make(
 	int fft_len,
 	const std::vector<std::vector<int> > &occupied_carriers,
-	const std::string &len_tag_key,
+	const std::string &tsb_key,
 	const std::string &packet_len_tag_key,
 	int symbols_skipped,
 	const std::string &carr_offset_key,
@@ -43,7 +43,7 @@ namespace gr {
       return gnuradio::get_initial_sptr (
 	  new ofdm_serializer_vcc_impl(
 		      fft_len, occupied_carriers,
-		      len_tag_key, packet_len_tag_key,
+		      tsb_key, packet_len_tag_key,
 		      symbols_skipped,
 		      carr_offset_key,
 		      input_is_shifted
@@ -64,7 +64,7 @@ namespace gr {
 	  new ofdm_serializer_vcc_impl(
 	    allocator->fft_len(),
 	    allocator->occupied_carriers(),
-	    allocator->len_tag_key(),
+	    allocator->tsb_key(),
 	    packet_len_tag_key,
 	    symbols_skipped,
 	    carr_offset_key,
@@ -76,7 +76,7 @@ namespace gr {
     ofdm_serializer_vcc_impl::ofdm_serializer_vcc_impl (
 		    int fft_len,
 		    const std::vector<std::vector<int> > &occupied_carriers,
-		    const std::string &len_tag_key,
+		    const std::string &tsb_key,
 		    const std::string &packet_len_tag_key,
 		    int symbols_skipped,
 		    const std::string &carr_offset_key,
@@ -84,11 +84,11 @@ namespace gr {
       : tagged_stream_block ("ofdm_serializer_vcc",
 		       io_signature::make(1, 1, sizeof (gr_complex) * fft_len),
 		       io_signature::make(1, 1, sizeof (gr_complex)),
-		       len_tag_key),
+		       tsb_key),
 	    d_fft_len(fft_len),
 	    d_occupied_carriers(occupied_carriers),
 	    d_packet_len_tag_key(pmt::string_to_symbol(packet_len_tag_key)),
-	    d_out_len_tag_key(pmt::string_to_symbol((packet_len_tag_key.empty() ? len_tag_key : packet_len_tag_key))),
+	    d_out_tsb_key(pmt::string_to_symbol((packet_len_tag_key.empty() ? tsb_key : packet_len_tag_key))),
 	    d_symbols_skipped(symbols_skipped % occupied_carriers.size()),
 	    d_carr_offset_key(pmt::string_to_symbol(carr_offset_key)),
 	    d_curr_set(symbols_skipped % occupied_carriers.size()),
@@ -136,9 +136,9 @@ namespace gr {
     void
     ofdm_serializer_vcc_impl::update_length_tags(int n_produced, int n_ports)
     {
-      add_item_tag(0, nitems_written(0),
-	d_out_len_tag_key,
-	pmt::from_long(n_produced)
+      add_item_tag(0, nitems_written(0) + n_produced - 1,
+	d_out_tsb_key,
+	pmt::PMT_T
       );
     }
 
@@ -155,19 +155,18 @@ namespace gr {
       int carr_offset = 0;
 
       std::vector<tag_t> tags;
-      // Packet mode
-      if (!d_length_tag_key_str.empty()) {
-	get_tags_in_range(tags, 0, nitems_read(0), nitems_read(0)+1);
-	for (unsigned i = 0; i < tags.size(); i++) {
-	  if (tags[i].key == d_carr_offset_key) {
-	    carr_offset = pmt::to_long(tags[i].value);
-	  }
-	  if (tags[i].key == d_packet_len_tag_key) {
-	    packet_length = pmt::to_long(tags[i].value);
-	    remove_item_tag(0, tags[i]);
-	  }
+      // TSB mode
+      if (not d_tsb_key_str.empty()) {
+	get_tags_in_window(tags, 0, 0, 1, d_carr_offset_key);
+	if (not tags.empty()) {
+          carr_offset = pmt::to_long(tags[0].value);
 	}
-      } else {
+	get_tags_in_window(tags, 0, 0, 1, d_packet_len_tag_key);
+	if (not tags.empty()) {
+          packet_length = pmt::to_long(tags[0].value);
+          remove_item_tag(0, tags[0]);
+	}
+      } else { // Regular streaming mode
 	// recalc frame length from noutput_items
 	frame_length = 0;
 	int sym_per_frame = 0;
@@ -202,7 +201,7 @@ namespace gr {
       }
 
       // Housekeeping
-      if (d_length_tag_key_str.empty()) {
+      if (d_tsb_key_str.empty()) {
 	consume_each(frame_length);
       } else {
 	d_curr_set = d_symbols_skipped;

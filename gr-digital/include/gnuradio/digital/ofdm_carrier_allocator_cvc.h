@@ -73,7 +73,7 @@ namespace gr {
      public:
       typedef boost::shared_ptr<ofdm_carrier_allocator_cvc> sptr;
 
-      virtual std::string len_tag_key() = 0;
+      virtual std::string tsb_key() = 0;
       virtual const int fft_len() = 0;
       virtual std::vector<std::vector<int> > occupied_carriers() = 0;
 
@@ -100,7 +100,7 @@ namespace gr {
        *                   synchronisation purposes, e.g. OFDM symbols with every second
        *                   sub-carrier being idle). Is a vector of complex vectors of length
        *                   \p fft_len
-       * \param len_tag_key The key of the tag identifying the length of the input packet.
+       * \param tsb_key The key of the tag identifying the input packet boundary.
        */
       static sptr make(
 	  int fft_len,

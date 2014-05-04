@@ -31,17 +31,17 @@ namespace gr {
   namespace digital {
 
     ofdm_cyclic_prefixer::sptr
-    ofdm_cyclic_prefixer::make(size_t input_size, size_t output_size, int rolloff_len, const std::string &len_tag_key)
+    ofdm_cyclic_prefixer::make(size_t input_size, size_t output_size, int rolloff_len, const std::string &tsb_key)
     {
-      return gnuradio::get_initial_sptr (new ofdm_cyclic_prefixer_impl(input_size, output_size, rolloff_len, len_tag_key));
+      return gnuradio::get_initial_sptr (new ofdm_cyclic_prefixer_impl(input_size, output_size, rolloff_len, tsb_key));
     }
 
 
-    ofdm_cyclic_prefixer_impl::ofdm_cyclic_prefixer_impl(size_t input_size, size_t output_size, int rolloff_len, const std::string &len_tag_key)
+    ofdm_cyclic_prefixer_impl::ofdm_cyclic_prefixer_impl(size_t input_size, size_t output_size, int rolloff_len, const std::string &tsb_key)
   : tagged_stream_block ("ofdm_cyclic_prefixer",
 		  io_signature::make (1, 1, input_size*sizeof(gr_complex)),
 		  io_signature::make (1, 1, sizeof(gr_complex)),
-		  len_tag_key),
+		  tsb_key),
 	d_fft_len(input_size),
 	d_output_size(output_size),
 	d_cp_size(output_size - input_size),
@@ -69,7 +69,7 @@ namespace gr {
 	}
       }
 
-      if (len_tag_key.empty()) {
+      if (tsb_key.empty()) {
 	set_output_multiple(d_output_size);
       } else {
 	set_tag_propagation_policy(TPP_DONT);
@@ -108,7 +108,7 @@ namespace gr {
       int symbols_to_read = 0;
 
       // 1) Figure out if we're in freewheeling or packet mode
-      if (!d_length_tag_key_str.empty()) {
+      if (!d_tsb_key_str.empty()) {
 	symbols_to_read = ninput_items[0];
 	noutput_items = symbols_to_read * d_output_size + d_delay_line.size();
       } else {
@@ -133,7 +133,7 @@ namespace gr {
       // 3) If we're in packet mode:
       //    - flush the delay line, if applicable
       //    - Propagate tags
-      if (!d_length_tag_key_str.empty()) {
+      if (!d_tsb_key_str.empty()) {
 	if (d_rolloff_len) {
 	  for (unsigned i = 0; i < d_delay_line.size(); i++) {
 	    *out++ = d_delay_line[i];

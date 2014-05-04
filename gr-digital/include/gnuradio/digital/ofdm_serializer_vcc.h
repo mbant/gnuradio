@@ -37,11 +37,12 @@ namespace gr {
      * This is the inverse block to the carrier_allocator_cvc. It outputs the
      * complex data symbols as a tagged stream, discarding the pilot symbols.
      *
-     * If given, two different tags are parsed: The first key (\p len_tag_key)
-     * specifies the number of OFDM symbols in the frame at the input. The
-     * second key (\p packet_len_tag_key) specifies the number of complex symbols
-     * that are coded into this frame. If given, this second key is then used
-     * at the output, otherwise, \p len_tag_key is used.
+     * Two tags can be specified TODO write this
+     * If given, a packet length tag is parsed (other than the TSB tag, that is):
+     * The tag with key \p packet_len_tag_key specifies the number of complex symbols
+     * that are coded into this frame. If given, this key is then used
+     * at the output as TSB key, otherwise, \p len_tag_key is used.
+     *
      * If both are given, the packet length specifies the maximum number of
      * output items, and the frame length specifies the exact number of
      * consumed input items.
@@ -69,7 +70,7 @@ namespace gr {
       static sptr make(
 	  int fft_len,
 	  const std::vector<std::vector<int> > &occupied_carriers,
-	  const std::string &len_tag_key="frame_len",
+	  const std::string &input_tsb_key="frame_len",
 	  const std::string &packet_len_tag_key="",
 	  int symbols_skipped=0,
 	  const std::string &carr_offset_key="",

@@ -37,12 +37,6 @@ namespace gr {
       const int d_fixed_frame_len;
       std::vector<gr_complex> d_channel_state;
 
-     protected:
-      void parse_length_tags(
-	  const std::vector<std::vector<tag_t> > &tags,
-	  gr_vector_int &n_input_items_reqd
-      );
-
      public:
       ofdm_frame_equalizer_vcvc_impl(
 	  ofdm_equalizer_base::sptr equalizer,

@@ -31,16 +31,16 @@ namespace gr {
   namespace digital {
 
     crc32_bb::sptr
-    crc32_bb::make(bool check, const std::string& lengthtagname)
+    crc32_bb::make(bool check, const std::string& tsb_tag)
     {
-      return gnuradio::get_initial_sptr (new crc32_bb_impl(check, lengthtagname));
+      return gnuradio::get_initial_sptr (new crc32_bb_impl(check, tsb_tag));
     }
 
-    crc32_bb_impl::crc32_bb_impl(bool check, const std::string& lengthtagname)
+    crc32_bb_impl::crc32_bb_impl(bool check, const std::string& tsb_tag)
       : tagged_stream_block("crc32_bb",
 		   io_signature::make(1, 1, sizeof (char)),
 		   io_signature::make(1, 1, sizeof (char)),
-		   lengthtagname),
+		   tsb_tag),
 	d_check(check),
 	d_npass(0), d_nfail(0)
     {
