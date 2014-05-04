@@ -23,6 +23,7 @@ include(GrPython)
 GR_PYTHON_INSTALL(FILES
     __init__.py
     tag_utils.py
+    tagged_streams.py
     gateway.py
     gr_threading.py
     gr_threading_23.py

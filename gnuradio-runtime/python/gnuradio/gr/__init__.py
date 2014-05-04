@@ -44,6 +44,7 @@ from exceptions import *
 from top_block import *
 from hier_block2 import *
 from tag_utils import *
+from tagged_streams import *
 from gateway import basic_block, sync_block, decim_block, interp_block
 
 # Force the preference database to be initialized
