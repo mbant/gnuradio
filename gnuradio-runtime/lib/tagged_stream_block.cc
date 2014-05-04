@@ -1,6 +1,6 @@
 /* -*- c++ -*- */
 /*
- * Copyright 2013 Free Software Foundation, Inc.
+ * Copyright 2013-2014 Free Software Foundation, Inc.
  *
  * This file is part of GNU Radio
  *
@@ -32,11 +32,12 @@ namespace gr {
   tagged_stream_block::tagged_stream_block(const std::string &name,
                                            io_signature::sptr input_signature,
                                            io_signature::sptr output_signature,
-                                           const std::string &length_tag_key)
+                                           const std::string &tsb_key)
     : block(name, input_signature, output_signature),
-      d_length_tag_key(pmt::string_to_symbol(length_tag_key)),
+      d_tsb_key(pmt::string_to_symbol(tsb_key)),
+      d_input_buffer_ready(input_signature->min_streams(), false),
       d_n_input_items_reqd(input_signature->min_streams(), 0),
-      d_length_tag_key_str(length_tag_key)
+      d_tsb_key_str(tsb_key)
   {
   }
 
@@ -52,21 +53,7 @@ namespace gr {
       }
       else {
         // If there's no item, there's no tag--so there must at least be one!
-        ninput_items_required[i] = std::max(1, (int)std::floor((double) noutput_items / relative_rate() + 0.5));
-      }
-    }
-  }
-
-  void
-  tagged_stream_block::parse_length_tags(const std::vector<std::vector<tag_t> > &tags,
-                                         gr_vector_int &n_input_items_reqd)
-  {
-    for(unsigned i = 0; i < tags.size(); i++) {
-      for(unsigned k = 0; k < tags[i].size(); k++) {
-        if(tags[i][k].key == d_length_tag_key) {
-          n_input_items_reqd[i] = pmt::to_long(tags[i][k].value);
-          remove_item_tag(i, tags[i][k]);
-        }
+        ninput_items_required[i] = 1;
       }
     }
   }
@@ -82,9 +69,12 @@ namespace gr {
   tagged_stream_block::update_length_tags(int n_produced, int n_ports)
   {
     for(int i = 0; i < n_ports; i++) {
-      add_item_tag(i, nitems_written(i),
-                   d_length_tag_key,
-                   pmt::from_long(n_produced));
+      add_item_tag(
+	  i,
+	  nitems_written(i) + n_produced - 1,
+	  d_tsb_key,
+	  pmt::PMT_T
+      );
     }
     return;
   }
@@ -95,28 +85,45 @@ namespace gr {
                                     gr_vector_const_void_star &input_items,
                                     gr_vector_void_star &output_items)
   {
-    if(d_length_tag_key_str.empty()) {
+    if(d_tsb_key_str.empty()) {
       return work(noutput_items, ninput_items, input_items, output_items);
     }
 
-    if(d_n_input_items_reqd[0] == 0) { // Otherwise, it's already set from a previous call
-      std::vector<std::vector<tag_t> > tags(input_items.size(), std::vector<tag_t>());
-      for(unsigned i = 0; i < input_items.size(); i++) {
-        get_tags_in_range(tags[i], i, nitems_read(i), nitems_read(i)+1);
+    std::cout << "general_work()" << std::endl;
+    // - Check for tsb tag
+    // YES:
+    //	  - check if output buffer is large enough, if necessary increase min output size
+    //	  - call work
+    //	  - consume, produce
+    //	  - add new tsb tag
+    // NO:
+    //    - Set the req'd min to what we have + 1 (?)
+    //    - Return
+
+    // 1) Search for packet boundary tags
+    bool all_tags_found = true;
+    std::vector<tag_t> tags;
+    for(size_t i = 0; i < input_items.size(); i++) {
+      if (d_input_buffer_ready[i]) {
+	continue;
       }
-      d_n_input_items_reqd.assign(input_items.size(), -1);
-      parse_length_tags(tags, d_n_input_items_reqd);
+      get_tags_in_window(tags, i, 0, ninput_items[i], d_tsb_key);
+      if (not tags.empty()) {
+	std::sort(tags.begin(), tags.end(), tag_t::offset_compare);
+	d_n_input_items_reqd[i] = tags[0].offset - nitems_read(i) + 1;
+	d_input_buffer_ready[i] = true;
+	remove_item_tag(i, tags[0]);
+      } else {
+	all_tags_found = false;
+	// Discuss: Is there a better way to do this?
+	d_n_input_items_reqd[i] = ninput_items[i] + 1;
+      }
     }
-    for(unsigned i = 0; i < input_items.size(); i++) {
-      if(d_n_input_items_reqd[i] == -1) {
-        GR_LOG_FATAL(d_logger, boost::format("Missing a required length tag on port %1% at item #%2%") % i % nitems_read(i));
-        throw std::runtime_error("Missing length tag.");
-      }
-      if(d_n_input_items_reqd[i] > ninput_items[i]) {
-        return 0;
-      }
+    if (not all_tags_found) {
+      return 0;
     }
 
+    // 2) OK, all tags are there. Check output buffers.
     int min_output_size = calculate_output_stream_length(d_n_input_items_reqd);
     if(noutput_items < min_output_size) {
       set_min_noutput_items(min_output_size);
@@ -124,6 +131,7 @@ namespace gr {
     }
     set_min_noutput_items(1);
 
+    // 3) Buffers are all ready. Call work etc.
     // WORK CALLED HERE //
     int n_produced = work(noutput_items, d_n_input_items_reqd, input_items, output_items);
     //////////////////////
@@ -136,11 +144,14 @@ namespace gr {
     }
     if (n_produced > 0) {
       update_length_tags(n_produced, output_items.size());
+    } else if (n_produced == WORK_CALLED_PRODUCE) {
+      update_length_tags(-1, output_items.size());
     }
 
+    d_input_buffer_ready.assign(input_items.size(), false);
     d_n_input_items_reqd.assign(input_items.size(), 0);
 
     return n_produced;
-  }
+  }  // general_work()
 
 }  /* namespace gr */
