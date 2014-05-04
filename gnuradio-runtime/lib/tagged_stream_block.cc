@@ -89,43 +89,34 @@ namespace gr {
       return work(noutput_items, ninput_items, input_items, output_items);
     }
 
-    std::cout << "general_work()" << std::endl;
-    // - Check for tsb tag
-    // YES:
-    //	  - check if output buffer is large enough, if necessary increase min output size
-    //	  - call work
-    //	  - consume, produce
-    //	  - add new tsb tag
-    // NO:
-    //    - Set the req'd min to what we have + 1 (?)
-    //    - Return
-
-    // 1) Search for packet boundary tags
+    // 1) Search for 'last item' tags on all input ports,
+    // if they're not there, increase their d_n_input_items_reqd[] value,
+    // which will cause forecast to request more data
     bool all_tags_found = true;
     std::vector<tag_t> tags;
     for(size_t i = 0; i < input_items.size(); i++) {
       if (d_input_buffer_ready[i]) {
-	continue;
+        continue;
       }
       get_tags_in_window(tags, i, 0, ninput_items[i], d_tsb_key);
       if (not tags.empty()) {
-	std::sort(tags.begin(), tags.end(), tag_t::offset_compare);
-	d_n_input_items_reqd[i] = tags[0].offset - nitems_read(i) + 1;
-	d_input_buffer_ready[i] = true;
-	remove_item_tag(i, tags[0]);
+        std::sort(tags.begin(), tags.end(), tag_t::offset_compare);
+        d_n_input_items_reqd[i] = tags[0].offset - nitems_read(i) + 1;
+        d_input_buffer_ready[i] = true;
+        remove_item_tag(i, tags[0]);
       } else {
-	all_tags_found = false;
-	// Discuss: Is there a better way to do this?
-	d_n_input_items_reqd[i] = ninput_items[i] + 1;
+        all_tags_found = false;
+        // Discuss: Is there a better way to do this?
+        d_n_input_items_reqd[i] = ninput_items[i] + 1;
       }
     }
     if (not all_tags_found) {
       return 0;
     }
 
-    // 2) OK, all tags are there. Check output buffers.
+    // 2) OK, all tags are there. Check size of output buffers.
     int min_output_size = calculate_output_stream_length(d_n_input_items_reqd);
-    if(noutput_items < min_output_size) {
+    if (noutput_items < min_output_size) {
       set_min_noutput_items(min_output_size);
       return 0;
     }
