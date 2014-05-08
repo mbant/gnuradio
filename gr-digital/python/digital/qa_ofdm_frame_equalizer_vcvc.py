@@ -210,17 +210,17 @@ class qa_ofdm_frame_equalizer_vcvc (gr_unittest.TestCase):
         chan_tag.offset = 0
         chan_tag.key = pmt.string_to_symbol("ofdm_sync_chan_taps")
         chan_tag.value = pmt.init_c32vector(fft_len, channel[:fft_len])
-        src = blocks.vector_source_c(numpy.multiply(tx_signal, channel), False, fft_len, (self.tsb_key, chan_tag))
-        sink = blocks.vector_sink_c(fft_len)
+        src = blocks.vector_source_c(numpy.multiply(tx_signal, channel), False, fft_len, (chan_tag,))
+        sink = blocks.tsb_vector_sink_c(vlen=fft_len, tsb_key=self.tsb_key)
         eq = digital.ofdm_frame_equalizer_vcvc(equalizer.base(), 0, self.tsb_key, True)
         self.tb.connect(
                 src,
-                blocks.stream_to_tagged_stream(gr.sizeof_gr_complex, fft_len, n_syms, self.tsb_key),
+                blocks.stream_to_tagged_stream(gr.sizeof_gr_complex, fft_len, 4, self.tsb_key),
                 eq,
                 sink
         )
         self.tb.run ()
-        rx_data = [cnst.decision_maker_v((x,)) if x != 0 else -1 for x in sink.data()]
+        rx_data = [cnst.decision_maker_v((x,)) if x != 0 else -1 for x in sink.data()[0]]
         # Check data
         self.assertEqual(tx_data, rx_data)
         # Check tags
@@ -233,7 +233,6 @@ class qa_ofdm_frame_equalizer_vcvc (gr_unittest.TestCase):
             else:
                 tag_dict[ptag.key] = pmt.to_python(tag.value)
         expected_dict = {
-                'frame_len': 4,
                 'ofdm_sync_chan_taps': channel[-fft_len:]
         }
         self.assertEqual(tag_dict, expected_dict)
@@ -272,10 +271,10 @@ class qa_ofdm_frame_equalizer_vcvc (gr_unittest.TestCase):
         src = gr.vector_source_c(numpy.multiply(tx_signal, channel), False, fft_len)
         # We do specify a length tag, it should then appear at the output
         eq = digital.ofdm_frame_equalizer_vcvc(equalizer.base(), 0, self.tsb_key, False, n_syms)
-        sink = blocks.vector_sink_c(fft_len)
+        sink = blocks.tsb_vector_sink_c(vlen=fft_len, tsb_key=self.tsb_key)
         self.tb.connect(
                 src,
-                blocks.stream_to_tagged_stream(gr.sizeof_gr_complex, fft_len, n_syms, self.tsb_key),
+                blocks.stream_to_tagged_stream(gr.sizeof_gr_complex, fft_len, 4, self.tsb_key),
                 eq,
                 sink
         )
@@ -283,7 +282,7 @@ class qa_ofdm_frame_equalizer_vcvc (gr_unittest.TestCase):
         rx_data = [cnst.decision_maker_v((x,)) if x != 0 else -1 for x in sink.data()]
         self.assertEqual(tx_data, rx_data)
         # Check TSB Functionality
-        packets = gr.tagged_streams.data_to_packets(sink.data(), sink.tags(), self.tsb_key)
+        packets = sink.data()[0]
         self.assertEqual(len(packets) == 1)
         self.assertEqual(len(packets[0]) == len(tx_data) / fft_len)
 
@@ -353,11 +352,11 @@ class qa_ofdm_frame_equalizer_vcvc (gr_unittest.TestCase):
         chan_tag.key = pmt.string_to_symbol("ofdm_sync_chan_taps")
         chan_tag.value = pmt.init_c32vector(fft_len, channel[:fft_len])
         src = blocks.vector_source_c(numpy.multiply(tx_signal, channel), False, fft_len, (chan_tag,))
-        eq = digital.ofdm_frame_equalizer_vcvc(equalizer.base(), 0, len_tag_key, True)
+        eq = digital.ofdm_frame_equalizer_vcvc(equalizer.base(), 0, self.tsb_key, True)
         sink = blocks.vector_sink_c(fft_len)
         self.tb.connect(
                 src,
-                blocks.stream_to_tagged_stream(gr.sizeof_gr_complex, fft_len, n_syms, self.tsb_key),
+                blocks.stream_to_tagged_stream(gr.sizeof_gr_complex, fft_len, 4, self.tsb_key),
                 eq,
                 sink
         )
