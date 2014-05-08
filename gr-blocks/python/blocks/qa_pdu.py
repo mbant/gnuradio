@@ -76,7 +76,8 @@ class test_pdu(gr_unittest.TestCase):
         # Convert the message PMT as a pair into its vector
         result_msg = dbg.get_message(0)
         msg_vec = pmt.cdr(result_msg)
-        #pmt.print(msg_vec)
+        print pmt.u8vector_elements(msg_vec)
+        #print msg_vec
 
         # Convert the PMT vector into a Python list
         msg_data = []
@@ -121,8 +122,8 @@ class test_pdu(gr_unittest.TestCase):
         tag2.key = pmt.string_to_symbol('eggs')
         tag2.value = pmt.from_long(42)
         src = blocks.vector_source_f(src_data, tags=(tag1, tag2))
-        s2ts = blocks.stream_to_tagged_stream(gr.sizeof_float, vlen=1, packet_len=packet_len, len_tag_key="packet_len")
-        ts2pdu = blocks.tagged_stream_to_pdu(blocks.float_t, "packet_len")
+        s2ts = blocks.stream_to_tagged_stream(gr.sizeof_float, vlen=1, packet_len=packet_len, tsb_key="packet_last")
+        ts2pdu = blocks.tagged_stream_to_pdu(blocks.float_t, "packet_last")
         dbg = blocks.message_debug()
         self.tb.connect(src, s2ts, ts2pdu)
         self.tb.msg_connect(ts2pdu, "pdus", dbg, "store")

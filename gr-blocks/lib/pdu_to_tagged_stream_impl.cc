@@ -52,7 +52,7 @@ namespace gr {
     pdu_to_tagged_stream_impl::work(int noutput_items,
 				    gr_vector_const_void_star &input_items,
 				    gr_vector_void_star &output_items)
-    {   
+    {
       char *out = (char *)output_items[0];
       int nout = 0;
 
@@ -76,16 +76,10 @@ namespace gr {
 	// make sure type is valid
 	if (!pmt::is_pair(msg)) // TODO: implement pdu::is_valid()
 	  throw std::runtime_error("received a malformed pdu message");
-	
+
 	// grab the components of the pdu message
 	pmt::pmt_t meta(pmt::car(msg));
 	pmt::pmt_t vect(pmt::cdr(msg));
-
-	// compute offset for output tag
-	uint64_t offset = nitems_written(0) + nout;
-
-	// add a tag for pdu length
-	add_item_tag(0, offset, d_tag, pmt::from_long(pmt::length(vect)), pmt::mp(alias()));
 
 	// if we recieved metadata add it as tags
 	if (!pmt::eq(meta, pmt::PMT_NIL) ) {
@@ -111,7 +105,14 @@ namespace gr {
 	if (nsave > 0) {
 	  d_remain.resize(nsave*d_itemsize, 0);
 	  memcpy(&d_remain[0], ptr + ncopy*d_itemsize, nsave*d_itemsize);
-        }
+        } else {
+	  // compute offset for output tag
+	  uint64_t offset = nitems_written(0) + nout;
+
+	  // add a tag for pdu length
+	  add_item_tag(0, offset, d_tag, pmt::from_long(pmt::length(vect)), pmt::mp(alias()));
+	}
+
       }
       
       return nout;

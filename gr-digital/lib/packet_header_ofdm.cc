@@ -113,14 +113,14 @@ namespace gr {
     {
       std::vector<unsigned char> in_descrambled(d_header_len, 0);
       for (int i = 0; i < d_header_len; i++) {
-      	in_descrambled[i] = in[i] ^ d_scramble_mask[i];
+        in_descrambled[i] = in[i] ^ d_scramble_mask[i];
       }
       if (!packet_header_default::header_parser(&in_descrambled[0], tags)) {
-	return false;
+        return false;
       }
       int packet_len = 0; // # of bytes in this frame
       for (unsigned i = 0; i < tags.size(); i++) {
-	if (pmt::equal(tags[i].key, d_len_tag_key)) {
+        if (pmt::equal(tags[i].key, d_len_tag_key)) {
 	  // Convert bytes to complex symbols:
 	  packet_len = pmt::to_long(tags[i].value) * 8 / d_bits_per_payload_sym;
 	  if (pmt::to_long(tags[i].value) * 8 % d_bits_per_payload_sym) {
