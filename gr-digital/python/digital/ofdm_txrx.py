@@ -1,5 +1,5 @@
 #
-# Copyright 2013 Free Software Foundation, Inc.
+# Copyright 2013,2015 Free Software Foundation, Inc.
 # 
 # This file is part of GNU Radio
 # 
@@ -33,21 +33,18 @@ from gnuradio import gr
 import digital_swig as digital
 from utils import tagged_streams
 
-try:
-    # This will work when feature #505 is added.
-    from gnuradio import fft
-    from gnuradio import blocks
-    from gnuradio import analog
-except ImportError:
-    # Until then this will work.
-    import fft_swig as fft
-    import blocks_swig as blocks
-    import analog_swig as analog
+from gnuradio import fft
+from gnuradio import blocks
+from gnuradio import analog
+from gnuradio import fec
 
+#############################################################################
+# Default values
+#############################################################################
 _def_fft_len = 64
 _def_cp_len = 16
 _def_frame_length_tag_key = "frame_length"
-_def_packet_length_tag_key = "packet_length"
+_def_packet_tsb_key = "packet_length"
 _def_packet_num_tag_key = "packet_num"
 # Data and pilot carriers are same as in 802.11a
 _def_occupied_carriers = (range(-26, -21) + range(-20, -7) + range(-6, 0) + range(1, 7) + range(8, 21) + range(22, 27),)
@@ -58,10 +55,36 @@ _pilot_sym_scramble_seq = (
         -1,-1,1,-1, 1,-1,1,1, -1,-1,-1,1, 1,-1,-1,-1, -1,1,-1,-1, 1,-1,1,1, 1,1,-1,1, -1,1,-1,1,
         -1,-1,-1,-1, -1,1,-1,1, 1,-1,1,-1, 1,1,1,-1, -1,1,-1,-1, -1,1,1,1, -1,-1,-1,-1, -1,-1,-1
 )
+# TODO is this right? Looks wrong.
 _def_pilot_symbols= tuple([(x, x, x, -x) for x in _pilot_sym_scramble_seq])
 _seq_seed = 42
+_def_MTU = 1500
+_def_code_rate = 2
+_def_code_polys = [109, 79]
+_def_fec_encoder_make = lambda: fec.cc_encoder_make(
+    _def_MTU,
+    7, # Length (k)
+    _def_code_rate, # 1/rate
+    (_def_code_polys),
+    0, # Start state
+    fec.CC_TERMINATED,
+    True
+)
+_def_fec_decoder_make = lambda: map((lambda a: fec.cc_decoder.make(
+    _def_MTU,
+    7,
+    _def_code_rate,
+    (_def_code_polys),
+    0,  # Start state
+    -1, # End state
+    fec.CC_TERMINATED,
+    False, # We don't need no padding
+)), range(0,1))
+_def_fec_puncpat = '11'
 
-
+#############################################################################
+# Helper functions
+#############################################################################
 def _get_active_carriers(fft_len, occupied_carriers, pilot_carriers):
     """ Returns a list of all carriers that at some point carry data or pilots. """
     active_carriers = list()
@@ -115,6 +138,9 @@ def _get_constellation(bps):
         print 'Modulation not supported.'
         exit(1)
 
+#############################################################################
+# Transmitter
+#############################################################################
 class ofdm_tx(gr.hier_block2):
     """ Hierarchical block for OFDM modulation.
 
@@ -124,7 +150,7 @@ class ofdm_tx(gr.hier_block2):
     Args:
     fft_len: The length of FFT (integer).
     cp_len:  The length of cyclic prefix in total samples (integer).
-    packet_length_tag_key: The name of the tag giving packet length at the input.
+    packet_tsb_key: The name of the tag giving packet length at the input.
     occupied_carriers: A vector of vectors describing which OFDM carriers are occupied.
     pilot_carriers: A vector of vectors describing which OFDM carriers are occupied with pilot symbols.
     pilot_symbols: The pilot symbols.
@@ -137,9 +163,11 @@ class ofdm_tx(gr.hier_block2):
     rolloff: The rolloff length in samples. Must be smaller than the CP.
     debug_log: Write output into log files (Warning: creates lots of data!)
     scramble_bits: Activates the scramblers (set this to True unless debugging)
+    fec_encoder: An encoder object, or provide string 'default' to use a default one
+    puncpat: Puncture pattern for fec_encoder
     """
     def __init__(self, fft_len=_def_fft_len, cp_len=_def_cp_len,
-                 packet_length_tag_key=_def_packet_length_tag_key,
+                 packet_length_tag_key=_def_packet_tsb_key,
                  occupied_carriers=_def_occupied_carriers,
                  pilot_carriers=_def_pilot_carriers,
                  pilot_symbols=_def_pilot_symbols,
@@ -149,7 +177,8 @@ class ofdm_tx(gr.hier_block2):
                  sync_word2=None,
                  rolloff=0,
                  debug_log=False,
-                 scramble_bits=False
+                 scramble_bits=False,
+                 **kwargs
                  ):
         gr.hier_block2.__init__(self, "ofdm_tx",
                     gr.io_signature(1, 1, gr.sizeof_char),
@@ -157,7 +186,7 @@ class ofdm_tx(gr.hier_block2):
         ### Param init / sanity check ########################################
         self.fft_len           = fft_len
         self.cp_len            = cp_len
-        self.packet_length_tag_key = packet_length_tag_key
+        self.packet_tsb_key    = packet_length_tag_key
         self.occupied_carriers = occupied_carriers
         self.pilot_carriers    = pilot_carriers
         self.pilot_symbols     = pilot_symbols
@@ -184,7 +213,7 @@ class ofdm_tx(gr.hier_block2):
         else:
             self.scramble_seed = 0x00 # We deactivate the scrambler by init'ing it with zeros
         ### Header modulation ################################################
-        crc = digital.crc32_bb(False, self.packet_length_tag_key)
+        crc = digital.crc32_bb(False, self.packet_tsb_key) # Really, this is part of the payload
         header_constellation  = _get_constellation(bps_header)
         header_mod = digital.chunks_to_symbols_bc(header_constellation.points())
         formatter_object = digital.packet_header_ofdm(
@@ -193,10 +222,10 @@ class ofdm_tx(gr.hier_block2):
             bits_per_payload_sym=self.bps_payload,
             scramble_header=scramble_bits
         )
-        header_gen = digital.packet_headergenerator_bb(formatter_object.base(), self.packet_length_tag_key)
+        header_gen = digital.packet_headergenerator_bb(formatter_object.base(), self.packet_tsb_key)
         header_payload_mux = blocks.tagged_stream_mux(
                 itemsize=gr.sizeof_gr_complex*1,
-                lengthtagname=self.packet_length_tag_key,
+                lengthtagname=self.packet_tsb_key,
                 tag_preserve_head_pos=1 # Head tags on the payload stream stay on the head
         )
         self.connect(
@@ -217,17 +246,49 @@ class ofdm_tx(gr.hier_block2):
             7,
             0, # Don't reset after fixed length (let the reset tag do that)
             bits_per_byte=8, # This is before unpacking
-            reset_tag_key=self.packet_length_tag_key
-        )
-        payload_unpack = blocks.repack_bits_bb(
-            8, # Unpack 8 bits per byte
-            bps_payload,
-            self.packet_length_tag_key
+            reset_tag_key=self.packet_tsb_key
         )
         self.connect(
             crc,
             payload_scrambler,
-            payload_unpack,
+        )
+        if kwargs.get('fec_encoder') is not None:
+            payload_unpack = blocks.repack_bits_bb(
+                8, # Unpack 8 bits per byte
+                1,
+                self.packet_tsb_key
+            )
+            encoder = kwargs.get('fec_encoder')
+            if encoder == 'default':
+                encoder = _def_fec_encoder_make()
+            fec_block = fec.extended_tagged_encoder(
+                    encoder_obj_list=encoder,
+                    puncpat=kwargs.get('puncpat', _def_fec_puncpat),
+                    lentagname=self.packet_tsb_key,
+            )
+            last_block_before_mod = blocks.repack_bits_bb(
+                1, # FEC output is 1 bit per byte
+                bps_payload,
+                self.packet_tsb_key
+            )
+            self.connect(
+                payload_scrambler,
+                payload_unpack,
+                fec_block,
+                last_block_before_mod,
+            )
+        else:
+            last_block_before_mod = blocks.repack_bits_bb(
+                8, # Unpack 8 bits per byte
+                bps_payload,
+                self.packet_tsb_key
+            )
+            self.connect(
+                payload_scrambler,
+                last_block_before_mod
+            )
+        self.connect(
+            last_block_before_mod,
             payload_mod,
             (header_payload_mux, 1)
         )
@@ -238,7 +299,7 @@ class ofdm_tx(gr.hier_block2):
             pilot_carriers=self.pilot_carriers,
             pilot_symbols=self.pilot_symbols,
             sync_words=self.sync_words,
-            len_tag_key=self.packet_length_tag_key
+            len_tag_key=self.packet_tsb_key
         )
         ffter = fft.fft_vcc(
                 self.fft_len,
@@ -250,7 +311,7 @@ class ofdm_tx(gr.hier_block2):
             self.fft_len,
             self.fft_len+self.cp_len,
             rolloff,
-            self.packet_length_tag_key
+            self.packet_tsb_key
         )
         self.connect(header_payload_mux, allocator, ffter, cyclic_prefixer, self)
         if debug_log:
@@ -258,6 +319,9 @@ class ofdm_tx(gr.hier_block2):
             self.connect(cyclic_prefixer, blocks.file_sink(gr.sizeof_gr_complex,           'tx-signal.dat'))
 
 
+#############################################################################
+# Receiver
+#############################################################################
 class ofdm_rx(gr.hier_block2):
     """ Hierarchical block for OFDM demodulation.
 
@@ -281,7 +345,7 @@ class ofdm_rx(gr.hier_block2):
     """
     def __init__(self, fft_len=_def_fft_len, cp_len=_def_cp_len,
                  frame_length_tag_key=_def_frame_length_tag_key,
-                 packet_length_tag_key=_def_packet_length_tag_key,
+                 packet_length_tag_key=_def_packet_tsb_key,
                  packet_num_tag_key=_def_packet_num_tag_key,
                  occupied_carriers=_def_occupied_carriers,
                  pilot_carriers=_def_pilot_carriers,
@@ -291,7 +355,8 @@ class ofdm_rx(gr.hier_block2):
                  sync_word1=None,
                  sync_word2=None,
                  debug_log=False,
-                 scramble_bits=False
+                 scramble_bits=False,
+                 **kwargs
                  ):
         gr.hier_block2.__init__(self, "ofdm_rx",
                     gr.io_signature(1, 1, gr.sizeof_gr_complex),
@@ -300,7 +365,7 @@ class ofdm_rx(gr.hier_block2):
         self.fft_len           = fft_len
         self.cp_len            = cp_len
         self.frame_length_tag_key    = frame_length_tag_key
-        self.packet_length_tag_key   = packet_length_tag_key
+        self.packet_tsb_key    = packet_length_tag_key
         self.occupied_carriers = occupied_carriers
         self.bps_header        = bps_header
         self.bps_payload       = bps_payload
@@ -369,7 +434,7 @@ class ofdm_rx(gr.hier_block2):
         header_demod     = digital.constellation_decoder_cb(header_constellation.base())
         header_formatter = digital.packet_header_ofdm(
                 occupied_carriers, 1,
-                packet_length_tag_key,
+                self.packet_tsb_key,
                 frame_length_tag_key,
                 packet_num_tag_key,
                 bps_header,
@@ -393,7 +458,7 @@ class ofdm_rx(gr.hier_block2):
             self.connect((chanest, 0),      blocks.tag_debug(gr.sizeof_gr_complex * fft_len, 'post-hdr-chanest'))
             self.connect(header_eq,         blocks.file_sink(gr.sizeof_gr_complex * fft_len, 'post-hdr-eq.dat'))
             self.connect(header_serializer, blocks.file_sink(gr.sizeof_gr_complex,           'post-hdr-serializer.dat'))
-            self.connect(header_descrambler, blocks.file_sink(1,                             'post-hdr-demod.dat'))
+            self.connect(header_demod,      blocks.file_sink(1,                              'post-hdr-demod.dat'))
         ### Payload demod ####################################################
         payload_fft = fft.fft_vcc(self.fft_len, True, (), True)
         payload_constellation = _get_constellation(bps_payload)
@@ -414,7 +479,7 @@ class ofdm_rx(gr.hier_block2):
         payload_serializer = digital.ofdm_serializer_vcc(
                 fft_len, occupied_carriers,
                 self.frame_length_tag_key,
-                self.packet_length_tag_key,
+                self.packet_tsb_key,
                 1 # Skip 1 symbol (that was already in the header)
         )
         payload_demod = digital.constellation_decoder_cb(payload_constellation.base())
@@ -424,17 +489,59 @@ class ofdm_rx(gr.hier_block2):
             7,
             0, # Don't reset after fixed length
             bits_per_byte=8, # This is after packing
-            reset_tag_key=self.packet_length_tag_key
+            reset_tag_key=self.packet_tsb_key
         )
-        payload_pack = blocks.repack_bits_bb(bps_payload, 8, self.packet_length_tag_key, True)
-        self.crc = digital.crc32_bb(True, self.packet_length_tag_key)
+        self.crc = digital.crc32_bb(True, self.packet_tsb_key)
         self.connect(
                 (hpd, 1),
                 payload_fft,
                 payload_eq,
                 payload_serializer,
                 payload_demod,
-                payload_pack,
+        )
+        if kwargs.get('fec_decoder') is not None:
+            payload_repack = blocks.repack_bits_bb(
+                    bps_payload,
+                    1,
+                    self.packet_tsb_key,
+                    True
+            )
+            decoder = kwargs.get('fec_decoder')
+            if decoder == 'default':
+                decoder = _def_fec_decoder_make()
+            fec_block = fec.extended_tagged_decoder(
+                    decoder_obj_list=decoder,
+                    ann=None,
+                    puncpat=kwargs.get('puncpat', _def_fec_puncpat),
+                    integration_period=10000,
+                    lentagname=self.packet_tsb_key,
+            )
+            self.payload_pack = blocks.repack_bits_bb(
+                    1, 8,
+                    self.packet_tsb_key,
+                    True
+            )
+            self.connect(
+                    payload_demod,
+                    payload_repack,
+                    digital.map_bb(([-1, 1])), # TODO can we get soft bits?
+                    blocks.char_to_float(1, 1),
+                    fec_block,
+                    self.payload_pack
+            )
+        else:
+            self.payload_pack = blocks.repack_bits_bb(
+                    bps_payload,
+                    8,
+                    self.packet_tsb_key,
+                    True
+            )
+            self.connect(
+                    payload_demod,
+                    self.payload_pack
+            )
+        self.connect(
+                self.payload_pack,
                 self.payload_descrambler,
                 self.crc,
                 self
@@ -445,7 +552,7 @@ class ofdm_rx(gr.hier_block2):
             self.connect(payload_eq,         blocks.file_sink(gr.sizeof_gr_complex*fft_len, 'post-payload-eq.dat'))
             self.connect(payload_serializer, blocks.file_sink(gr.sizeof_gr_complex,         'post-payload-serializer.dat'))
             self.connect(payload_demod,      blocks.file_sink(1,                            'post-payload-demod.dat'))
-            self.connect(payload_pack,       blocks.file_sink(1,                            'post-payload-pack.dat'))
-            self.connect(crc,                blocks.file_sink(1,                            'post-payload-crc.dat'))
+            self.connect(self.payload_pack,  blocks.file_sink(1,                            'post-payload-pack.dat'))
+            self.connect(self.crc,           blocks.file_sink(1,                            'post-payload-crc.dat'))
 
 

@@ -25,7 +25,13 @@
 	  bps_header=$header_mod.bps,
 	  bps_payload=$payload_mod.bps,
 	  debug_log=$log,
-	  scramble_bits=$scramble_bits
+	  scramble_bits=$scramble_bits,
+	  #if $fec_decoder()
+	  fec_decoder=$fec_decoder,
+	  #end if
+	  #if len($puncpat())
+	  puncpat=$puncpat,
+	  #end if
 	 )</make>
   <param>
     <name>FFT Length</name>
@@ -174,6 +180,22 @@
       <name>Yes</name>
       <key>True</key>
     </option>
+  </param>
+  <param>
+    <name>FEC Decoder</name>
+    <key>fec_decoder</key>
+    <value>None</value>
+    <type>raw</type>
+    <hide>part</hide>
+    <tab>FEC</tab>
+  </param>
+  <param>
+    <name>Puncture Pattern</name>
+    <key>puncpat</key>
+    <value>'11'</value>
+    <type>string</type>
+    <hide>part</hide>
+    <tab>FEC</tab>
   </param>
   <check>$fft_len &gt; 0</check>
   <check>$cp_len &gt; 0</check>
