@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2013 Free Software Foundation, Inc.
+ * Copyright 2011-2013,2015 Free Software Foundation, Inc.
  *
  * This file is part of GNU Radio
  *
@@ -175,6 +175,21 @@ namespace gr {
     _message.action = block_gw_message_type::ACTION_STOP;
     _handler->calleval(0);
     return _message.stop_args_return_value;
+  }
+
+  void
+  block_gateway_impl::custom_tag_propagator(
+      int noutput_items,
+      gr_vector_int &ninput_items,
+      gr_vector_const_void_star &input_items,
+      size_t noutput_ports
+  ) {
+    _message.action = block_gw_message_type::ACTION_CUSTOM_TP;
+    _message.custom_tp_args_noutput_items = noutput_items;
+    _message.custom_tp_args_ninput_items = ninput_items;
+    copy_pointers(_message.custom_tp_args_input_items, input_items);
+    _message.custom_tp_args_noutput_ports = noutput_ports;
+    _handler->calleval(0);
   }
 
   block_gw_message_type&

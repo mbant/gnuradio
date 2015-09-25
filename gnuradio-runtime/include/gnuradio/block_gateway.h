@@ -1,6 +1,6 @@
 /* -*- c++ -*- */
 /*
- * Copyright 2011-2013 Free Software Foundation, Inc.
+ * Copyright 2011-2013,2015 Free Software Foundation, Inc.
  *
  * This file is part of GNU Radio
  *
@@ -44,7 +44,8 @@ namespace gr {
   enum tag_propagation_policy_t {
     TPP_DONT = 0,
     TPP_ALL_TO_ALL = 1,
-    TPP_ONE_TO_ONE = 2
+    TPP_ONE_TO_ONE = 2,
+    TPP_CUSTOM = 3,
   };
 
   /*!
@@ -58,6 +59,7 @@ namespace gr {
       ACTION_FORECAST, //dispatch forecast
       ACTION_START, //dispatch start
       ACTION_STOP, //dispatch stop
+      ACTION_CUSTOM_TP // dispatch custom_tag_propagator
     };
 
     action_type action;
@@ -76,6 +78,11 @@ namespace gr {
 
     int forecast_args_noutput_items;
     std::vector<int> forecast_args_ninput_items_required;
+
+    int custom_tp_args_noutput_items;
+    std::vector<int> custom_tp_args_ninput_items;
+    std::vector<void *> custom_tp_args_input_items; //TODO this should be const void*, but swig cant int cast it right
+    size_t custom_tp_args_noutput_ports;
 
     bool start_args_return_value;
 

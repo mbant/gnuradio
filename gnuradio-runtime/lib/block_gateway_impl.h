@@ -1,6 +1,6 @@
 /* -*- c++ -*- */
 /*
- * Copyright 2013 Free Software Foundation, Inc.
+ * Copyright 2013,2015 Free Software Foundation, Inc.
  *
  * This file is part of GNU Radio
  *
@@ -60,6 +60,13 @@ namespace gr {
 
     bool start(void);
     bool stop(void);
+
+    void custom_tag_propagator(
+        int noutput_items,
+        gr_vector_int &ninput_items,
+        gr_vector_const_void_star &input_items,
+        size_t noutput_ports
+    );
 
     block_gw_message_type& block_message(void);
 

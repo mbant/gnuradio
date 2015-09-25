@@ -1,5 +1,5 @@
 #
-# Copyright 2011-2012 Free Software Foundation, Inc.
+# Copyright 2011-2012,2015 Free Software Foundation, Inc.
 #
 # This file is part of GNU Radio
 #
@@ -172,6 +172,14 @@ class gateway_block(object):
         elif self.__message.action == gr.block_gw_message_type.ACTION_STOP:
             self.__message.stop_args_return_value = self.stop()
 
+        elif self.__message.action == gr.block_gw_message_type.ACTION_CUSTOM_TP:
+            self.custom_tag_propagator(
+                    noutput_items=self.__message.custom_tp_args_noutput_items,
+                    ninput_items=self.__message.custom_tp_args_ninput_items,
+                    input_items=self.__message.custom_tp_args_input_items,
+                    noutput_ports=self.__message.custom_tp_args_noutput_items,
+            )
+
     def forecast(self, noutput_items, ninput_items_required):
         """
         forecast is only called from a general block
@@ -193,6 +201,10 @@ class gateway_block(object):
 
     def stop(self):
         return True
+
+    def custom_tag_propagator(self, *args, **kwargs):
+        """custom_tag_propagator to be overloaded in a derived class"""
+        raise NotImplementedError("custom_tag_propagator not implemented")
 
     def set_msg_handler(self, which_port, handler_func):
         handler = msg_handler()

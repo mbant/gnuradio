@@ -1,6 +1,6 @@
 /* -*- c++ -*- */
 /*
- * Copyright 2004,2008-2010,2013 Free Software Foundation, Inc.
+ * Copyright 2004,2008-2010,2013,2015 Free Software Foundation, Inc.
  *
  * This file is part of GNU Radio
  *
@@ -432,6 +432,20 @@ namespace gr {
       if(d_use_pc)
         d->start_perf_counters();
 #endif /* GR_PERFORMANCE_COUNTERS */
+
+      // This goes here for two reasons:
+      // 1) This is block-specific code and thus should be part of the
+      //    the performance analysis
+      // 2) We need to run this before we advance read/write pointers,
+      //    or we can't read the same tags as the work function
+      if (m->tag_propagation_policy() == block::TPP_CUSTOM) {
+        m->custom_tag_propagator(
+            noutput_items,
+            d_ninput_items,
+            d_input_items,
+            d_output_items.size()
+        );
+      }
 
       // Do the actual work of the block
       int n = m->general_work(noutput_items, d_ninput_items,

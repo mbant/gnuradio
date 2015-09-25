@@ -194,6 +194,33 @@ class vector_to_stream(gr.interp_block):
 
         return len(output_items[0])
 
+
+class custom_tpp_block(gr.sync_block):
+    def __init__(self):
+        gr.sync_block.__init__(
+            self,
+            name = "custom_tpp_block",
+            in_sig = [numpy.float32,],
+            out_sig = [numpy.float32,],
+        )
+        self.set_tag_propagation_policy(gr.TPP_CUSTOM)
+
+    def work(self, input_items, output_items):
+        output_items[0][:] = input_items[0]
+        return len(output_items[0])
+
+    def custom_tag_propagator(self, noutput_items, ninput_items, input_items, noutput_ports):
+        """
+        Really dumb propagator: Propagate everything delayed by one
+        (could be also achieved with declare_sample_delay(), but then
+        we wouldn't be testing this feature)
+        """
+        tags = self.get_tags_in_window(0, 0, ninput_items[0])
+        for tag in tags:
+            tag.offset = tag.offset + 1
+            self.add_item_tag(0, tag)
+
+
 class test_block_gateway(gr_unittest.TestCase):
 
     def test_add_f32(self):
@@ -274,6 +301,24 @@ class test_block_gateway(gr_unittest.TestCase):
         tb.connect(src, convert, v2s, sink)
         tb.run()
         self.assertEqual(sink.data(), (1, 2, 3, 4, 5, 6, 7, 8, 9, 10))
+
+    def test_custom_tpp(self):
+        test_vec = range(10)
+        testtag = gr.tag_t()
+        testtag.offset = 0
+        testtag.key = pmt.string_to_symbol('tag1')
+        testtag.value = pmt.from_long(0)
+        tb = gr.top_block()
+        src = blocks.vector_source_f(test_vec, False, tags=(testtag,))
+        ctp = custom_tpp_block()
+        sink = blocks.vector_sink_f()
+        tb.connect(src, ctp, sink)
+        tb.run()
+        self.assertEqual(sink.data(), tuple(test_vec))
+        tags = sink.tags()
+        self.assertEqual(len(tags), 1)
+        tag = gr.tag_to_python(tags[0])
+        self.assertEqual(tag.offset, 1)
 
 if __name__ == '__main__':
     gr_unittest.run(test_block_gateway, "test_block_gateway.xml")
