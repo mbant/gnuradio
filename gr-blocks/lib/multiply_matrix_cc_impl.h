@@ -32,9 +32,13 @@ namespace gr {
     {
      private:
       std::vector<std::vector<gr_complex> > d_A;
-      bool d_tag_prop_select; //!< If true, handle the tag propagation ourselves
 
-      void propagate_tags_by_A(int noutput_items, size_t ninput_ports, size_t noutput_ports);
+      void custom_tag_propagator(
+          int noutput_items,
+          gr_vector_int &ninput_items,
+          gr_vector_const_void_star &input_items,
+          size_t noutput_ports
+      );
 
       void msg_handler_A(pmt::pmt_t A);
 
@@ -44,8 +48,6 @@ namespace gr {
 
       const std::vector<std::vector<gr_complex> >& get_A() const { return d_A; };
       bool set_A(const std::vector<std::vector<gr_complex> > &new_A);
-
-      void set_tag_propagation_policy(gr::block::tag_propagation_policy_t p);
 
       int work(int noutput_items,
                gr_vector_const_void_star &input_items,

@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 # 
-# Copyright 2014 Free Software Foundation, Inc.
+# Copyright 2014-2015 Free Software Foundation, Inc.
 # 
 # This file is part of GNU Radio
 # 
@@ -180,9 +180,9 @@ class test_multiply_matrix_xx (gr_unittest.TestCase):
         tag2.offset = 0
         tag2.key = pmt.intern("in2")
         tag2.value = pmt.PMT_T
-        self.run_once(X_in, A, tpp=gr.TPP_ONE_TO_ONE, tags=(tag1, tag2))
-        self.assertTrue(pmt.equal(tag1.key, self.the_tags[0][0].key))
-        self.assertTrue(pmt.equal(tag2.key, self.the_tags[1][0].key))
+        self.run_once(X_in, A, tpp=gr.TPP_CUSTOM, tags=(tag1, tag2))
+        self.assertTrue(pmt.equal(tag1.key, self.the_tags[1][0].key))
+        self.assertTrue(pmt.equal(tag2.key, self.the_tags[0][0].key))
 
     #def test_006_t (self):
         #""" Message passing """
@@ -203,6 +203,5 @@ class test_multiply_matrix_xx (gr_unittest.TestCase):
 
 
 if __name__ == '__main__':
-    #gr_unittest.run(test_multiply_matrix_ff, "test_multiply_matrix_ff.xml")
-    gr_unittest.run(test_multiply_matrix_xx)
+    gr_unittest.run(test_multiply_matrix_xx, "test_multiply_matrix_xx.xml")
 

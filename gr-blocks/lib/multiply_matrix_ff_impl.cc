@@ -1,6 +1,6 @@
 /* -*- c++ -*- */
 /*
- * Copyright 2014 Free Software Foundation, Inc.
+ * Copyright 2014-2015 Free Software Foundation, Inc.
  *
  * This file is part of GNU Radio
  *
@@ -31,7 +31,6 @@
 namespace gr {
   namespace blocks {
 
-    const int multiply_matrix_ff::TPP_SELECT_BY_MATRIX = 999;
     const std::string multiply_matrix_ff::MSG_PORT_NAME_SET_A = "set_A";
 
     multiply_matrix_ff::sptr
@@ -85,19 +84,21 @@ namespace gr {
           }
         }
       }
-      if (d_tag_prop_select) {
-        propagate_tags_by_A(noutput_items, input_items.size(), output_items.size());
-      }
       return noutput_items;
     }
 
 
     // Copy tags from input k to output l if A[l][k] is not zero
     void
-    multiply_matrix_ff_impl::propagate_tags_by_A(int noutput_items, size_t ninput_ports, size_t noutput_ports)
-    {
+    multiply_matrix_ff_impl::custom_tag_propagator(
+        int noutput_items,
+        gr_vector_int &ninput_items,
+        gr_vector_const_void_star &,
+        size_t noutput_ports
+
+    ) {
       std::vector<gr::tag_t> tags;
-      for (size_t in_idx = 0; in_idx < ninput_ports; in_idx++) {
+      for (size_t in_idx = 0; in_idx < ninput_items.size(); in_idx++) {
         get_tags_in_window(
             tags,
             in_idx,
@@ -175,18 +176,6 @@ namespace gr {
 
       if (!set_A(new_A)) {
           GR_LOG_ALERT(d_logger, "Invalid message to set A.");
-      }
-    }
-
-    void
-    multiply_matrix_ff_impl::set_tag_propagation_policy(gr::block::tag_propagation_policy_t tpp)
-    {
-      if (((int) tpp) == TPP_SELECT_BY_MATRIX) {
-        set_tag_propagation_policy(TPP_DONT);
-        d_tag_prop_select = true;
-      } else {
-        gr::block::set_tag_propagation_policy(tpp);
-        d_tag_prop_select = false;
       }
     }
 
