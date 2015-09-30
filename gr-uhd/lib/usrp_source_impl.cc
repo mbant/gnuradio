@@ -545,9 +545,20 @@ namespace gr {
         return work(noutput_items, input_items, output_items);
 
       default:
-        //GR_LOG_WARN(d_logger, boost::format("USRP Source Block caught rx error: %d") % _metadata.strerror());
+        //GR_LOG_WARN(d_logger, boost::format("USRP Source Block caught rx error: %s") % _metadata.strerror());
         GR_LOG_WARN(d_logger, boost::format("USRP Source Block caught rx error code: %d") % _metadata.error_code);
-        return num_samps;
+        break;
+      }
+
+      if (_metadata.end_of_burst) {
+        for (size_t i = 0; i < _nchan; i++) {
+          this->add_item_tag(i,
+              nitems_written(i) + num_samps - 1,
+              EOB_KEY, pmt::PMT_T,
+              _id
+          );
+        }
+        _tag_now = true;
       }
 
       return num_samps;
