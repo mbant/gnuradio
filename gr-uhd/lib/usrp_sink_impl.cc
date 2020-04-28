@@ -187,6 +187,46 @@ std::vector<std::string> usrp_sink_impl::get_gain_names(size_t chan)
     return _dev->get_tx_gain_range(name, chan);
 }
 
+bool usrp_sink_impl::has_power_reference(const size_t chan)
+{
+#ifdef UHD_USRP_MULTI_USRP_POWER_LEVEL
+    const size_t dev_chan = _stream_args.channels[chan];
+    return _dev->has_tx_power_reference(dev_chan);
+#else
+    return false;
+#endif
+}
+
+void usrp_sink_impl::set_power_reference(const double power_dbm, const size_t chan)
+{
+#ifdef UHD_USRP_MULTI_USRP_POWER_LEVEL
+    const size_t dev_chan = _stream_args.channels[chan];
+    _dev->set_tx_power_reference(power_dbm, dev_chan);
+#else
+    throw std::runtime_error("not implemented in this version");
+#endif
+}
+
+double usrp_sink_impl::get_power_reference(const size_t chan)
+{
+#ifdef UHD_USRP_MULTI_USRP_POWER_LEVEL
+    const size_t dev_chan = _stream_args.channels[chan];
+    return _dev->get_tx_power_reference(dev_chan);
+#else
+    throw std::runtime_error("not implemented in this version");
+#endif
+}
+
+::uhd::meta_range_t usrp_sink_impl::get_power_range(size_t chan)
+{
+#ifdef UHD_USRP_MULTI_USRP_POWER_LEVEL
+    const size_t dev_chan = _stream_args.channels[chan];
+    return _dev->get_tx_power_range(dev_chan);
+#else
+    throw std::runtime_error("not implemented in this version");
+#endif
+}
+
 void usrp_sink_impl::set_antenna(const std::string& ant, size_t chan)
 {
     chan = _stream_args.channels[chan];
