@@ -1,4 +1,4 @@
-name: 'Make Test'
+name: 'DEV Windows CI'
 on:
   push:
     branches:
@@ -6,107 +6,46 @@ on:
   pull_request:
     branches:
       - master
+      - gha/windows
 jobs:
-  check-formatting:
-    name: Check C++ Formatting
-    runs-on: ubuntu-20.04
+  windows:
+    name: Windows 10
+    runs-on: windows-2019 # Windows Server 2019
+    env:
+      BOOST_ROOT: ${{github.workspace}}/deps/boost
+      BOOST_URL: https://sourceforge.net/projects/boost/files/boost/1.72.0/boost_1_72_0.tar.bz2/download
     steps:
-    - uses: actions/checkout@v2
-    - uses: gnuradio/clang-format-lint-action@v0.5-4
+    - name: Restore Boost cache
+      uses: actions/cache@v2
+      id: cache-boost-win
       with:
-        source: '.'
-        exclude: './volk'
-        extensions: 'h,hpp,cpp,cc,cc.in'
-  doxygen:
-    name: Doxygen
-    runs-on: ubuntu-20.04 # This can run on whatever
-    container:
-      image: 'gnuradio/ci-ubuntu-20.04-3.9:0.3'
-      volumes:
-        - build_data:/build
-    steps:
-    - uses: actions/checkout@v2
-      name: Checkout Project
-    - name: CMake
-      run: 'cd /build && cmake ${GITHUB_WORKSPACE}'
-    - name: Make Docs
-      run: 'cd /build && make doxygen_target'
-  # All of these shall depend on the formatting check (needs: check-formatting)
-  ubuntu-20_04:
-    name: Ubuntu 20.04
-    needs: check-formatting
-    runs-on: ubuntu-20.04
-    container:
-      image: 'gnuradio/ci-ubuntu-20.04-3.9:0.3'
-      volumes:
-        - build_data:/build
-      options: --cpus 2
-    steps:
-    - uses: actions/checkout@v2
-      name: Checkout Project
-    - name: CMake
+          path: ${{env.BOOST_ROOT}}
+          key: boost-win
+    - name: Install Boost
+      if: steps.cache-boost-win.outputs.cache-hit != 'true'
+      run: |
+          if [ "$OS" == "Windows_NT" ]; then
+              # fix up paths to be forward slashes consistently
+              BOOST_ROOT=$(echo $BOOST_ROOT | sed 's/\\/\//g')
+          fi
+          mkdir -p $BOOST_ROOT
+          curl --location --output $BOOST_ROOT/download.tar.bz2 $BOOST_URL
+          7z -o$BOOST_ROOT x $BOOST_ROOT/download.tar.bz2 -y -bd
+          7z -o$BOOST_ROOT x $BOOST_ROOT/download.tar -y -bd
+          cd $BOOST_ROOT && cp -r boost_*/* .
+          rm -rf boost_*/* download.tar.bz2 download.tar
+      shell: bash
+    # The next step has a built-in caching mechanism
+    - name: Install Vcpkg Dependendencies
+      uses: lukka/run-vcpkg@v6
       env:
-        CXXFLAGS: -Werror
-      run: 'cd /build && cmake ${GITHUB_WORKSPACE} -DENABLE_DOXYGEN=OFF'
-    - name: Make
-      run: 'cd /build && make -j2 -k'
-    - name: Make Test
-      run: 'cd /build && ctest --output-on-failure -E "qa_agc|qa_cpp_py_binding|qa_cpp_py_binding_set|qa_ctrlport_probes|qa_qtgui"'
-  fedora33:
-    name: Fedora 33
-    needs: check-formatting
-    runs-on: ubuntu-20.04 # This can run on whatever
-    container:
-      image: 'gnuradio/ci-fedora-33-3.9:1.0'
-      volumes:
-        - build_data:/build
-      options: --cpus 2
-    steps:
-    - uses: actions/checkout@v2
-      name: Checkout Project
-    - name: CMake
-      run: 'cd /build && cmake ${GITHUB_WORKSPACE} -DENABLE_DOXYGEN=OFF'
-    - name: Make
-      run: 'cd /build && make -j2'
-    - name: Make Test
-      run: 'cd /build && ctest --output-on-failure -E "qa_agc|qa_cpp_py_binding|qa_cpp_py_binding_set|qa_ctrlport_probes|qa_qtgui"'
-  centos8_3:
-    name: Centos 8.3
-    needs: check-formatting
-    runs-on: ubuntu-20.04 # This can run on whatever
-    container:
-      image: 'gnuradio/ci-centos-8.3-3.9:1.0'
-      volumes:
-        - build_data:/build
-      options: --cpus 2
-    steps:
-    - uses: actions/checkout@v2
-      name: Checkout Project
-    - name: CMake
-      env:
-        CXXFLAGS: -Werror
-      run: 'cd /build && cmake ${GITHUB_WORKSPACE} -DENABLE_DOXYGEN=OFF -DBoost_unit_test_framework_FOUND=ON'
-    - name: Make
-      run: 'cd /build && make -j2 -k'
-    - name: Make Test
-      run: 'cd /build && ctest --output-on-failure -E "qa_agc|qa_cpp_py_binding|qa_cpp_py_binding_set|qa_ctrlport_probes|qa_qtgui"'
-  debian10:
-    name: Debian 10
-    needs: check-formatting
-    runs-on: ubuntu-20.04 # This can run on whatever
-    container:
-      image: 'gnuradio/ci-debian-10-3.9:1.0'
-      volumes:
-        - build_data:/build
-      options: --cpus 2
-    steps:
-    - uses: actions/checkout@v2
-      name: Checkout Project
-    - name: CMake
-      env:
-        CXXFLAGS: -Werror
-      run: 'cd /build && cmake ${GITHUB_WORKSPACE} -DENABLE_DOXYGEN=OFF -DBoost_unit_test_framework_FOUND=ON'
-    - name: Make
-      run: 'cd /build && make -j2 -k'
-    - name: Make Test
-      run: 'cd /build && ctest --output-on-failure -E "qa_agc|qa_cpp_py_binding|qa_cpp_py_binding_set|qa_ctrlport_probes|qa_qtgui"'
+        vcpkgArgsFile: ${{github.workspace}}/.github/workflows/vcpkg-x86-windows-dependencies
+      with:
+        vcpkgGitCommitId: 0bf3923f9fab4001c00f0f429682a0853b5749e0
+        vcpkgArguments: '@${{env.vcpkgArgsFile}}'
+        vcpkgDirectory: '${{github.workspace}}/deps/vcpkg'
+        vcpkgTriplet: 'x86-windows'
+        appendedCacheKey: ${{hashFiles(env.vcpkgArgsFile)}}-cachekey
+    - name: Checkout Project
+      uses: actions/checkout@v2
+      # FIXME do all the rest
